@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getExpensesByDate } from './lib/transactions.js';
 import { formatRupiah, formatTanggalIndonesia, formatJam, toDateString } from './lib/formatters.js';
+import AnalysisPage from './AnalysisPage.jsx';
 
 /* ─── Helper ─── */
 function getTodayStr() {
@@ -186,6 +187,7 @@ export default function App() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
 
   const loadData = useCallback(async (date) => {
     setLoading(true);
@@ -239,6 +241,28 @@ export default function App() {
       <footer className="app-footer" role="contentinfo">
         <p>© {new Date().getFullYear()} BotFinanceku</p>
       </footer>
+
+      {/* FAB — Analysis */}
+      <button
+        id="btn-open-analysis"
+        className="fab-analysis"
+        onClick={() => setAnalysisOpen(true)}
+        aria-label="Buka analisis keuangan"
+        title="Analisis Keuangan"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6"  y1="20" x2="6"  y2="14" />
+          <polyline points="2 20 22 20" />
+        </svg>
+        <span className="fab-analysis__label">Analisis</span>
+      </button>
+
+      {/* Analysis overlay */}
+      {analysisOpen && (
+        <AnalysisPage onClose={() => setAnalysisOpen(false)} />
+      )}
     </div>
   );
 }

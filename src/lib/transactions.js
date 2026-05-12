@@ -43,3 +43,37 @@ export async function getExpensesByDate(date) {
     createdAt: row.created_at,
   }));
 }
+
+/**
+ * Ambil semua pengeluaran dalam rentang tanggal (inklusif).
+ * @param {string} startDate - format YYYY-MM-DD
+ * @param {string} endDate   - format YYYY-MM-DD
+ * @returns {Promise<Array>}
+ */
+export async function getExpensesByRange(startDate, endDate) {
+  let query = supabase
+    .from(TABLE_NAME)
+    .select('*')
+    .gte(DATE_COLUMN, startDate)
+    .lte(DATE_COLUMN, endDate)
+    .order('created_at', { ascending: true });
+
+  if (TYPE_COLUMN) {
+    query = query.eq(TYPE_COLUMN, 'expense');
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Supabase error: ${error.message}`);
+  }
+
+  return (data || []).map((row) => ({
+    id: row.id,
+    amount: row[AMOUNT_COLUMN],
+    category: row[CATEGORY_COLUMN] || '—',
+    note: row[NOTE_COLUMN] || '',
+    createdAt: row.created_at,
+    date: row[DATE_COLUMN],
+  }));
+}

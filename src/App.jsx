@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getExpensesByDate } from './lib/transactions.js';
 import { formatRupiah, formatTanggalIndonesia, formatJam, toDateString } from './lib/formatters.js';
 import AnalysisPage from './AnalysisPage.jsx';
+import AiPanel from './components/AiPanel.jsx';
 
 /* ─── Helper ─── */
 function getTodayStr() {
@@ -122,8 +123,8 @@ function TransactionItem({ tx }) {
         <span className="tx-item__icon" aria-hidden="true">🧾</span>
         <div>
           <p className="tx-item__category">{tx.category}</p>
-          {tx.note && tx.note !== tx.category && (
-            <p className="tx-item__note">{tx.note}</p>
+          {tx.subject && tx.subject !== tx.category && (
+            <p className="tx-item__note">{tx.subject}</p>
           )}
           <p className="tx-item__time">{formatJam(tx.createdAt)}</p>
         </div>
@@ -188,6 +189,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const loadData = useCallback(async (date) => {
     setLoading(true);
@@ -211,6 +213,11 @@ export default function App() {
   const handleDateChange = (newDate) => {
     setSelectedDate(newDate);
   };
+
+  // Callback saat AI panel selesai konfirmasi — refresh dashboard
+  const handleAiDataChanged = useCallback(() => {
+    loadData(selectedDate);
+  }, [loadData, selectedDate]);
 
   return (
     <div className="app-wrapper">
@@ -242,26 +249,54 @@ export default function App() {
         <p>© {new Date().getFullYear()} BotFinanceku</p>
       </footer>
 
-      {/* FAB — Analysis */}
-      <button
-        id="btn-open-analysis"
-        className="fab-analysis"
-        onClick={() => setAnalysisOpen(true)}
-        aria-label="Buka analisis keuangan"
-        title="Analisis Keuangan"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <line x1="18" y1="20" x2="18" y2="10" />
-          <line x1="12" y1="20" x2="12" y2="4" />
-          <line x1="6"  y1="20" x2="6"  y2="14" />
-          <polyline points="2 20 22 20" />
-        </svg>
-        <span className="fab-analysis__label">Analisis</span>
-      </button>
+      {/* FAB Group */}
+      <div className="fab-group">
+        {/* FAB — AI */}
+        <button
+          id="btn-open-ai"
+          className="fab-ai"
+          onClick={() => setAiOpen(true)}
+          aria-label="Buka panel Tilik AI"
+          title="Tilik AI"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 2a4 4 0 0 1 4 4v1h1a3 3 0 0 1 3 3v1a3 3 0 0 1-3 3h-1v4a4 4 0 0 1-8 0v-4H7a3 3 0 0 1-3-3v-1a3 3 0 0 1 3-3h1V6a4 4 0 0 1 4-4z" />
+            <circle cx="9.5" cy="10" r="1" fill="currentColor" />
+            <circle cx="14.5" cy="10" r="1" fill="currentColor" />
+            <path d="M9.5 15a3.5 3.5 0 0 0 5 0" />
+          </svg>
+          <span className="fab-ai__label">AI</span>
+        </button>
+
+        {/* FAB — Analysis */}
+        <button
+          id="btn-open-analysis"
+          className="fab-analysis"
+          onClick={() => setAnalysisOpen(true)}
+          aria-label="Buka analisis keuangan"
+          title="Analisis Keuangan"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6"  y1="20" x2="6"  y2="14" />
+            <polyline points="2 20 22 20" />
+          </svg>
+          <span className="fab-analysis__label">Analisis</span>
+        </button>
+      </div>
 
       {/* Analysis overlay */}
       {analysisOpen && (
         <AnalysisPage onClose={() => setAnalysisOpen(false)} />
+      )}
+
+      {/* AI overlay */}
+      {aiOpen && (
+        <AiPanel
+          onClose={() => setAiOpen(false)}
+          onDataChanged={handleAiDataChanged}
+        />
       )}
     </div>
   );

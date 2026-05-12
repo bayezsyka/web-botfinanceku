@@ -1,6 +1,3 @@
-import { supabase } from './supabase.js';
-import { TABLE_NAME } from './transactions.js';
-
 export const VALID_CATEGORIES = [
   'makan & minum',
   'jajan',
@@ -10,116 +7,59 @@ export const VALID_CATEGORIES = [
 
 export async function confirmTransactionCategory(transaction, category) {
   if (!transaction?.id) {
-    return {
-      success: false,
-      supabaseOk: false,
-      aiOk: false,
-      message: 'ID transaksi tidak ditemukan. Data tidak bisa dikonfirmasi.',
-    };
+    return { success: false, supabaseOk: false, aiOk: false, message: 'ID transaksi tidak ditemukan.' };
   }
 
-  if (!transaction?.subject || typeof transaction.subject !== 'string' || transaction.subject.trim() === '') {
-    return {
-      success: false,
-      supabaseOk: false,
-      aiOk: false,
-      message: 'Subject transaksi kosong. Tidak bisa mengirim feedback.',
-    };
+  if (!transaction?.subject) {
+    return { success: false, supabaseOk: false, aiOk: false, message: 'Subject transaksi kosong.' };
   }
 
   if (typeof transaction?.amount !== 'number' || Number.isNaN(transaction.amount)) {
-    return {
-      success: false,
-      supabaseOk: false,
-      aiOk: false,
-      message: 'Amount bukan angka valid. Tidak bisa mengirim feedback.',
-    };
+    return { success: false, supabaseOk: false, aiOk: false, message: 'Amount transaksi tidak valid.' };
   }
 
   if (!VALID_CATEGORIES.includes(category)) {
-    return {
-      success: false,
-      supabaseOk: false,
-      aiOk: false,
-      message: `Kategori "${category}" tidak dikenali.`,
-    };
+    return { success: false, supabaseOk: false, aiOk: false, message: `Kategori "${category}" tidak valid.` };
   }
-
-  const { data: updatedRow, error: updateError } = await supabase
-    .from(TABLE_NAME)
-    .update({
-      confirmed_category: category,
-      is_confirmed: true,
-    })
-    .eq('id', transaction.id)
-    .select('id, subject, confirmed_category, is_confirmed')
-    .single();
-
-  if (updateError) {
-    console.error('Supabase update gagal:', updateError);
-
-    return {
-      success: false,
-      supabaseOk: false,
-      aiOk: false,
-      message: `Gagal menyimpan konfirmasi ke database: ${updateError.message}`,
-    };
-  }
-
-  if (!updatedRow?.id || updatedRow.is_confirmed !== true) {
-    console.error('Supabase update tidak mengubah row:', {
-      transaction,
-      category,
-      updatedRow,
-    });
-
-    return {
-      success: false,
-      supabaseOk: false,
-      aiOk: false,
-      message: 'Database tidak berubah. Cek ID transaksi atau izin update Supabase.',
-    };
-  }
-
-  let aiOk = false;
 
   try {
-    const res = await fetch('/ai/feedback', {
+    const response = await fetch('/ai/confirm', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        expense_id: transaction.id,
         subject: transaction.subject,
         amount: transaction.amount,
         correct_category: category,
       }),
     });
 
-    if (!res.ok) {
-      throw new Error(`AI service responded ${res.status}`);
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return {
+        success: false,
+        supabaseOk: false,
+        aiOk: false,
+        message: result?.detail || 'Konfirmasi gagal.',
+      };
     }
 
-    aiOk = true;
-  } catch (err) {
-    console.error('AI feedback gagal:', err);
-  }
-
-  if (aiOk) {
     return {
       success: true,
       supabaseOk: true,
       aiOk: true,
       message: 'Kategori disimpan. AI ikut dilatih.',
-      updatedRow,
+      result,
+    };
+  } catch (error) {
+    console.error('Konfirmasi AI gagal:', error);
+
+    return {
+      success: false,
+      supabaseOk: false,
+      aiOk: false,
+      message: 'Gagal menghubungi AI service.',
     };
   }
-
-  return {
-    success: true,
-    supabaseOk: true,
-    aiOk: false,
-    message: 'Kategori dikonfirmasi, tapi latihan AI gagal. Coba lagi nanti.',
-    updatedRow,
-  };
 }

@@ -8,39 +8,29 @@ export const CATEGORY_COLUMN = 'subject';     // kolom kategori/subjek
 export const NOTE_COLUMN = 'subject';         // kolom catatan (sama dengan subject di schema ini)
 export const TYPE_COLUMN = null;              // null = tabel hanya pengeluaran, tidak ada kolom type
 
-/**
- * Mapping row Supabase ke format UI, termasuk semua field AI.
- * - `category` sekarang = confirmed_category || predicted_category || subject || 'Belum diklasifikasi'
- * - `subject` tetap dikirim apa adanya (nama transaksi asli).
- */
-function mapRow(row) {
+function mapExpenseRow(row) {
   const finalCategory =
     row.confirmed_category ||
     row.predicted_category ||
-    row[CATEGORY_COLUMN] ||
     'Belum diklasifikasi';
-
-  const aiStatus = row.is_confirmed ? 'terkonfirmasi' : 'belum dikonfirmasi';
 
   return {
     id: row.id,
-    amount: row[AMOUNT_COLUMN],
-    raw_amount: row.raw_amount,
-    subject: row[CATEGORY_COLUMN] || '',       // nama transaksi asli
-    category: finalCategory,                    // kategori tampilan (final)
-    note: row[NOTE_COLUMN] || '',
+    subject: row.subject || '',
+    amount: row.amount || 0,
+    raw_amount: row.raw_amount || '',
+    category: finalCategory,
+    final_category: finalCategory,
+    note: row.subject || '',
     createdAt: row.created_at,
-    date: row[DATE_COLUMN],
-    expense_date: row[DATE_COLUMN],
+    date: row.expense_date,
 
-    // AI fields
-    predicted_category: row.predicted_category || null,
-    confidence: row.confidence ?? null,
-    is_confident: row.is_confident ?? false,
-    confirmed_category: row.confirmed_category || null,
-    is_confirmed: row.is_confirmed ?? false,
-    model_version: row.model_version || null,
-    ai_status: aiStatus,
+    predicted_category: row.predicted_category,
+    confidence: row.confidence,
+    is_confident: row.is_confident,
+    confirmed_category: row.confirmed_category,
+    is_confirmed: row.is_confirmed === true,
+    model_version: row.model_version,
   };
 }
 
@@ -50,7 +40,6 @@ function mapRow(row) {
  * @returns {Promise<Array>}
  */
 export async function getExpensesByDate(date) {
-  // Rentang hari: 00:00:00 – 23:59:59 WIB (UTC+7)
   console.log('Fetching for date:', date);
   let query = supabase
     .from(TABLE_NAME)
@@ -58,7 +47,6 @@ export async function getExpensesByDate(date) {
     .eq(DATE_COLUMN, date)
     .order('created_at', { ascending: false });
 
-  // Jika ada TYPE_COLUMN, filter hanya pengeluaran
   if (TYPE_COLUMN) {
     query = query.eq(TYPE_COLUMN, 'expense');
   }
@@ -70,7 +58,7 @@ export async function getExpensesByDate(date) {
     throw new Error(`Supabase error: ${error.message}`);
   }
 
-  return (data || []).map(mapRow);
+  return (data || []).map(mapExpenseRow);
 }
 
 /**
@@ -97,7 +85,7 @@ export async function getExpensesByRange(startDate, endDate) {
     throw new Error(`Supabase error: ${error.message}`);
   }
 
-  return (data || []).map(mapRow);
+  return (data || []).map(mapExpenseRow);
 }
 
 /**
@@ -123,5 +111,5 @@ export async function getAllExpenses(limit = 200) {
     throw new Error(`Supabase error: ${error.message}`);
   }
 
-  return (data || []).map(mapRow);
+  return (data || []).map(mapExpenseRow);
 }

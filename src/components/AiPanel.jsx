@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { getAllExpenses } from '../lib/transactions.js';
 import { confirmTransactionCategory, VALID_CATEGORIES } from '../lib/aiFeedback.js';
 import { formatRupiah } from '../lib/formatters.js';
@@ -11,12 +12,19 @@ function Toast({ message, type, onDone }) {
   }, [onDone]);
 
   return (
-    <div className={`ai-toast ai-toast--${type}`} role="status" aria-live="polite">
+    <motion.div 
+      initial={{ opacity: 0, y: 20, x: '-50%' }}
+      animate={{ opacity: 1, y: 0, x: '-50%' }}
+      exit={{ opacity: 0, scale: 0.9, x: '-50%' }}
+      className={`ai-toast ai-toast--${type}`} 
+      role="status" 
+      aria-live="polite"
+    >
       <span className="ai-toast__icon" aria-hidden="true">
         {type === 'success' ? '✅' : type === 'warning' ? '⚠️' : '❌'}
       </span>
       <span>{message}</span>
-    </div>
+    </motion.div>
   );
 }
 
@@ -24,20 +32,34 @@ function Toast({ message, type, onDone }) {
 function AiSummary({ unconfirmed, confirmed, avgConfidence }) {
   return (
     <div className="ai-summary">
-      <div className="ai-summary__card ai-summary__card--primary">
+      <motion.div 
+        className="ai-summary__card ai-summary__card--primary"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
         <p className="ai-summary__label">Belum Dikonfirmasi</p>
         <p className="ai-summary__value">{unconfirmed}</p>
-      </div>
-      <div className="ai-summary__card">
+      </motion.div>
+      <motion.div 
+        className="ai-summary__card"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
         <p className="ai-summary__label">Sudah Dikonfirmasi</p>
         <p className="ai-summary__value ai-summary__value--sm">{confirmed}</p>
-      </div>
-      <div className="ai-summary__card">
+      </motion.div>
+      <motion.div 
+        className="ai-summary__card"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
         <p className="ai-summary__label">Rata-rata Keyakinan</p>
         <p className="ai-summary__value ai-summary__value--sm">
           {avgConfidence != null ? `${avgConfidence.toFixed(0)}%` : '—'}
         </p>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -47,7 +69,6 @@ function AiConfirmationCard({ tx, onConfirm, busy }) {
   const confidencePercent = tx.confidence != null ? (tx.confidence * 100).toFixed(1) : null;
   const hasPrediction = !!tx.predicted_category;
 
-  // Format tanggal
   const dateStr = tx.expense_date || tx.date || '';
   const displayDate = dateStr
     ? new Date(dateStr + 'T12:00:00').toLocaleDateString('id-ID', {
@@ -58,7 +79,13 @@ function AiConfirmationCard({ tx, onConfirm, busy }) {
     : '';
 
   return (
-    <div className="ai-card">
+    <motion.div 
+      className="ai-card"
+      layout
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, x: 20 }}
+    >
       <div className="ai-card__header">
         <div className="ai-card__info">
           <p className="ai-card__subject">{tx.subject || '(tanpa nama)'}</p>
@@ -90,7 +117,6 @@ function AiConfirmationCard({ tx, onConfirm, busy }) {
           className="ai-cat-btn ai-cat-btn--confirm"
           disabled={!hasPrediction || busy}
           onClick={() => hasPrediction && onConfirm(tx, tx.predicted_category)}
-          title={!hasPrediction ? 'Tidak ada prediksi untuk dikonfirmasi' : 'Setujui prediksi AI'}
         >
           ✓ Benar
         </button>
@@ -105,20 +131,7 @@ function AiConfirmationCard({ tx, onConfirm, busy }) {
           </button>
         ))}
       </div>
-    </div>
-  );
-}
-
-/* ─── Confirmed mini-card ─── */
-function ConfirmedMiniCard({ tx }) {
-  return (
-    <div className="ai-confirmed-item">
-      <div className="ai-confirmed-item__left">
-        <span className="ai-confirmed-item__subject">{tx.subject || '—'}</span>
-        <span className="ai-confirmed-item__cat">→ {tx.confirmed_category}</span>
-      </div>
-      <span className="ai-confirmed-item__amount">{formatRupiah(tx.amount)}</span>
-    </div>
+    </motion.div>
   );
 }
 
@@ -145,7 +158,6 @@ export default function AiPanel({ onClose, onDataChanged }) {
     fetchData();
   }, [fetchData]);
 
-  // Pisahkan unconfirmed & confirmed
   const unconfirmed = allTxs
     .filter((tx) => !tx.is_confirmed)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -155,7 +167,6 @@ export default function AiPanel({ onClose, onDataChanged }) {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 5);
 
-  // Rata-rata confidence
   const withConf = allTxs.filter((tx) => tx.confidence != null);
   const avgConfidence =
     withConf.length > 0
@@ -177,37 +188,32 @@ export default function AiPanel({ onClose, onDataChanged }) {
     setBusyId(null);
 
     if (result.supabaseOk) {
-      // Refresh local data
       await fetchData();
-      // Notify parent to refresh dashboard
       if (onDataChanged) onDataChanged();
     }
   };
 
   return (
-    <div className="ai-overlay" role="dialog" aria-modal="true" aria-label="Tilik AI">
-      {/* Header */}
+    <motion.div 
+      className="ai-overlay"
+      initial={{ opacity: 0, x: '100%' }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: '100%' }}
+      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+    >
       <div className="ai-header">
         <div className="ai-header__inner">
           <div className="ai-header__left">
             <span className="ai-header__icon" aria-hidden="true">🤖</span>
             <div>
               <h2 className="ai-header__title">Tilik AI</h2>
-              <p className="ai-header__sub">Konfirmasi kategori agar model makin paham kebiasaanmu</p>
+              <p className="ai-header__sub">Konfirmasi kategori agar model makin paham</p>
             </div>
           </div>
-          <button
-            id="btn-close-ai"
-            className="ai-close-btn"
-            onClick={onClose}
-            aria-label="Tutup panel AI"
-          >
-            ✕
-          </button>
+          <button className="ai-close-btn" onClick={onClose}>✕</button>
         </div>
       </div>
 
-      {/* Body */}
       <div className="ai-body">
         {loading ? (
           <div className="ai-loader">
@@ -216,27 +222,20 @@ export default function AiPanel({ onClose, onDataChanged }) {
           </div>
         ) : (
           <div className="ai-content">
-            {/* Summary */}
             <AiSummary
               unconfirmed={unconfirmed.length}
               confirmed={allTxs.filter((tx) => tx.is_confirmed).length}
               avgConfidence={avgConfidence}
             />
 
-            {/* Unconfirmed list */}
             <div className="ai-section">
               <h3 className="ai-section__title">
                 ⏳ Belum Dikonfirmasi
                 <span className="ai-section__badge">{unconfirmed.length}</span>
               </h3>
 
-              {unconfirmed.length === 0 ? (
-                <div className="ai-empty">
-                  <span aria-hidden="true">🎉</span>
-                  <p>Semua transaksi sudah dikonfirmasi!</p>
-                </div>
-              ) : (
-                <div className="ai-card-list">
+              <div className="ai-card-list">
+                <AnimatePresence mode="popLayout">
                   {unconfirmed.map((tx) => (
                     <AiConfirmationCard
                       key={tx.id}
@@ -245,35 +244,28 @@ export default function AiPanel({ onClose, onDataChanged }) {
                       busy={busyId === tx.id}
                     />
                   ))}
-                </div>
-              )}
-            </div>
-
-            {/* Confirmed recent */}
-            {confirmed.length > 0 && (
-              <div className="ai-section">
-                <h3 className="ai-section__title">
-                  ✅ Sudah Dikonfirmasi Terbaru
-                </h3>
-                <div className="ai-confirmed-list">
-                  {confirmed.map((tx) => (
-                    <ConfirmedMiniCard key={tx.id} tx={tx} />
-                  ))}
-                </div>
+                </AnimatePresence>
+                {unconfirmed.length === 0 && (
+                  <motion.div className="ai-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <span aria-hidden="true">🎉</span>
+                    <p>Semua transaksi sudah dikonfirmasi!</p>
+                  </motion.div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Toast */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onDone={() => setToast(null)}
-        />
-      )}
-    </div>
+      <AnimatePresence>
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onDone={() => setToast(null)}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

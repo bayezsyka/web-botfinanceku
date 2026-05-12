@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { getExpensesByDate } from './lib/transactions.js';
 import { formatRupiah, formatTanggalIndonesia, formatJam, toDateString } from './lib/formatters.js';
 import AnalysisPage from './AnalysisPage.jsx';
@@ -287,17 +288,21 @@ export default function App() {
       </div>
 
       {/* Analysis overlay */}
-      {analysisOpen && (
-        <AnalysisPage onClose={() => setAnalysisOpen(false)} />
-      )}
+      <AnimatePresence>
+        {analysisOpen && (
+          <AnalysisPage onClose={() => setAnalysisOpen(false)} />
+        )}
+      </AnimatePresence>
 
       {/* AI overlay */}
-      {aiOpen && (
-        <AiPanel
-          onClose={() => setAiOpen(false)}
-          onDataChanged={handleAiDataChanged}
-        />
-      )}
+      <AnimatePresence>
+        {aiOpen && (
+          <AiPanel
+            onClose={() => setAiOpen(false)}
+            onDataChanged={handleAiDataChanged}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -39,4 +39,7 @@ export default defineConfig({
       },
     }),
   ],
+  optimizeDeps: {
+    include: ['recharts', 'lucide-react', 'framer-motion'],
+  },
 });

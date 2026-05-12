@@ -164,23 +164,37 @@ export default function AiPanel({ onClose, onDataChanged }) {
 
   const handleConfirm = async (tx, category) => {
     setBusyId(tx.id);
-    const result = await confirmTransactionCategory(tx, category);
 
-    if (result.success && result.aiOk) {
-      setToast({ message: result.message, type: 'success' });
-    } else if (result.success && !result.aiOk) {
-      setToast({ message: result.message, type: 'warning' });
-    } else {
-      setToast({ message: result.message, type: 'error' });
-    }
+    try {
+      const result = await confirmTransactionCategory(tx, category);
 
-    setBusyId(null);
+      if (result.success) {
+        setAllTxs((prev) =>
+          prev.map((item) =>
+            item.id === tx.id
+              ? {
+                  ...item,
+                  is_confirmed: true,
+                  confirmed_category: category,
+                  category,
+                  final_category: category,
+                }
+              : item
+          )
+        );
 
-    if (result.supabaseOk) {
-      // Refresh local data
-      await fetchData();
-      // Notify parent to refresh dashboard
-      if (onDataChanged) onDataChanged();
+        setToast({ message: result.message, type: 'success' });
+
+        if (onDataChanged) {
+          onDataChanged();
+        }
+
+        fetchData();
+      } else {
+        setToast({ message: result.message, type: 'error' });
+      }
+    } finally {
+      setBusyId(null);
     }
   };
 

@@ -2,12 +2,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Legend
+  Legend, Cell as ReCell
 } from 'recharts';
 import { 
   TrendingUp, TrendingDown, Target, Zap, 
   PieChart as PieIcon, Activity, Calendar, Clock, 
-  ChevronRight, BrainCircuit, X, Sparkles, Filter
+  ChevronRight, BrainCircuit, X, Sparkles, Filter,
+  ArrowUpRight, ArrowDownRight, BarChart3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getExpensesByRange } from './lib/transactions.js';
@@ -36,7 +37,12 @@ const getWeekRange = (dateStr) => {
   return { start: toDateString(mon), end: toDateString(sun) };
 };
 
-const totalOf = (txs) => txs.reduce((s, t) => s + t.amount, 0);
+const getMonthName = (monthStr) => {
+  const [y, m] = monthStr.split('-');
+  return new Date(y, m - 1).toLocaleDateString('id-ID', { month: 'short' });
+};
+
+const totalOf = (txs) => txs.reduce((s, t) => s + (t.amount || 0), 0);
 
 /* ─── Components ─── */
 
@@ -54,8 +60,21 @@ function CustomTooltip({ active, payload, label }) {
   return null;
 }
 
-function AIInsightCard({ txs, type = 'daily' }) {
+function AIInsightCard({ txs, type = 'daily', monthlyData = [] }) {
   const insight = useMemo(() => {
+    if (type === 'monthly') {
+      if (monthlyData.length < 2) return "Data bulanan masih dikumpulkan. Terus catat agar AI bisa memberikan tren jangka panjang!";
+      
+      const latest = monthlyData[monthlyData.length - 1];
+      const prev = monthlyData[monthlyData.length - 2];
+      const diff = latest.amount - prev.amount;
+      const diffPct = Math.round((diff / prev.amount) * 100);
+      
+      if (diffPct > 20) return `Bulan ini pengeluaranmu naik tajam (${diffPct}%) dibanding bulan lalu. Hati-hati ya, coba cek kategori apa yang melonjak!`;
+      if (diffPct < -10) return `Keren! Pengeluaranmu turun ${Math.abs(diffPct)}% dibanding bulan lalu. Keuanganmu makin sehat!`;
+      return "Pengeluaran bulan ini cukup stabil dibanding bulan sebelumnya. Pertahankan kontrolnya!";
+    }
+
     if (txs.length === 0) return "Belum ada data cukup untuk memberikan insight. Terus catat pengeluaranmu!";
     
     const total = totalOf(txs);
@@ -71,7 +90,7 @@ function AIInsightCard({ txs, type = 'daily' }) {
     }
     
     return `Kategori ${topCat[0]} menyumbang ${Math.round((topCat[1]/total)*100)}% dari total pengeluaranmu. Mungkin ada yang bisa diefisiensikan?`;
-  }, [txs, type]);
+  }, [txs, type, monthlyData]);
 
   return (
     <motion.div 
@@ -103,6 +122,12 @@ function StatCard({ label, value, icon: Icon, trend, subValue, accent = false })
       </div>
       <div className="stat-value">{value}</div>
       {subValue && <div className="stat-value--sm" style={{ opacity: 0.7, marginTop: 2 }}>{subValue}</div>}
+      {trend !== undefined && (
+        <div className={`spending-badge spending-badge--${trend > 0 ? 'up' : 'down'}`} style={{ marginTop: 8 }}>
+          {trend > 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+          {Math.abs(trend)}% vs bulan lalu
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -331,6 +356,109 @@ function WeeklyAnalysis({ txs, today }) {
   );
 }
 
+function MonthlyAnalysis({ monthlyByMonth, today }) {
+  const currentMonthKey = today.slice(0, 7);
+  const monthKeys = Object.keys(monthlyByMonth).sort();
+  
+  const chartData = useMemo(() => {
+    return monthKeys.map(key => ({
+      name: getMonthName(key),
+      amount: totalOf(monthlyByMonth[key]),
+      key
+    }));
+  }, [monthlyByMonth, monthKeys]);
+
+  const stats = useMemo(() => {
+    const latest = chartData[chartData.length - 1]?.amount || 0;
+    const prev = chartData[chartData.length - 2]?.amount || 0;
+    const diffPct = prev > 0 ? Math.round(((latest - prev) / prev) * 100) : 0;
+    const totalAll = chartData.reduce((s, c) => s + c.amount, 0);
+    const avg = chartData.length > 0 ? totalAll / chartData.length : 0;
+
+    return { latest, prev, diffPct, avg, totalAll };
+  }, [chartData]);
+
+  const topCategories = useMemo(() => {
+    const currentMonthTxs = monthlyByMonth[currentMonthKey] || [];
+    const map = {};
+    currentMonthTxs.forEach(t => map[t.category] = (map[t.category] || 0) + t.amount);
+    return Object.entries(map)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+  }, [monthlyByMonth, currentMonthKey]);
+
+  return (
+    <div className="analysis-tab-content">
+      <AIInsightCard type="monthly" monthlyData={chartData} />
+
+      <div className="stat-row">
+        <StatCard 
+          accent 
+          label="Bulan Ini" 
+          value={formatRupiah(stats.latest)} 
+          icon={BarChart3}
+          trend={stats.diffPct}
+        />
+        <StatCard 
+          label="Rata-rata/Bulan" 
+          value={formatRupiah(stats.avg)} 
+          icon={Activity}
+        />
+      </div>
+
+      <div className="analysis-card">
+        <h3 className="analysis-card__title">📅 Perbandingan Bulanan</h3>
+        <div className="premium-chart-container" style={{ height: 280 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+              <XAxis dataKey="name" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis hide />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="amount" radius={[6, 6, 0, 0]} animationDuration={1500}>
+                {chartData.map((entry, index) => (
+                  <ReCell 
+                    key={`cell-${index}`} 
+                    fill={entry.key === currentMonthKey ? 'var(--clr-accent)' : 'var(--clr-primary)'} 
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="analysis-grid">
+        <div className="analysis-card">
+          <h3 className="analysis-card__title">🏷️ Top Kategori (Bulan Ini)</h3>
+          <div className="category-chart">
+            {topCategories.length === 0 ? (
+              <p className="analysis-empty-sm">Belum ada data di bulan ini.</p>
+            ) : (
+              topCategories.map((cat, i) => (
+                <div key={cat.name} className="category-chart__row" style={{ gridTemplateColumns: '100px 1fr 100px' }}>
+                  <span className="category-chart__name">{cat.name}</span>
+                  <div className="spark-bar-track">
+                    <motion.div 
+                      className="spark-bar-fill"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(cat.value / topCategories[0].value) * 100}%` }}
+                      transition={{ duration: 1, delay: i * 0.1 }}
+                      style={{ background: COLORS[i % COLORS.length] }}
+                    />
+                  </div>
+                  <span className="category-chart__amt">{formatRupiah(cat.value)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── MAIN COMPONENT ─── */
 
 export default function AnalysisPage({ onClose }) {
@@ -348,11 +476,26 @@ export default function AnalysisPage({ onClose }) {
     async function fetchData() {
       setLoading(true);
       try {
+        // Fetch Daily & Weekly
         const [d, w] = await Promise.all([
           getExpensesByRange(today, today),
           getExpensesByRange(getWeekRange(today).start, today)
         ]);
-        setData(prev => ({ ...prev, daily: d, weekly: w }));
+
+        // Fetch Monthly (Last 6 Months)
+        const now = new Date();
+        const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+        const m = await getExpensesByRange(toDateString(sixMonthsAgo), today);
+        
+        const groupedMonthly = {};
+        m.forEach(tx => {
+          const dateStr = tx.date || toDateString(new Date(tx.createdAt));
+          const ym = dateStr.slice(0, 7);
+          if (!groupedMonthly[ym]) groupedMonthly[ym] = [];
+          groupedMonthly[ym].push(tx);
+        });
+
+        setData({ daily: d, weekly: w, monthly: groupedMonthly });
       } catch (err) {
         console.error(err);
       } finally {
@@ -423,9 +566,7 @@ export default function AnalysisPage({ onClose }) {
               >
                 {activeTab === 'harian' && <DailyAnalysis txs={data.daily} />}
                 {activeTab === 'mingguan' && <WeeklyAnalysis txs={data.weekly} today={today} />}
-                {activeTab === 'bulanan' && (
-                  <div className="analysis-empty">Fitur analisis bulanan sedang disempurnakan. 🚀</div>
-                )}
+                {activeTab === 'bulanan' && <MonthlyAnalysis monthlyByMonth={data.monthly} today={today} />}
               </motion.div>
             </AnimatePresence>
           )}

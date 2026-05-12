@@ -179,95 +179,112 @@ export default function AiPanel({ onClose, onDataChanged }) {
     try {
       const result = await confirmTransactionCategory(tx, category);
 
-      if (result.success && result.aiOk) {
+      if (result.success) {
+        setAllTxs((prev) =>
+          prev.map((item) =>
+            item.id === tx.id
+              ? {
+                  ...item,
+                  is_confirmed: true,
+                  confirmed_category: category,
+                  category,
+                  final_category: category,
+                }
+              : item
+          )
+        );
+
         setToast({ message: result.message, type: 'success' });
-      } else if (result.success && !result.aiOk) {
-        setToast({ message: result.message, type: 'warning' });
+
+        if (onDataChanged) {
+          onDataChanged();
+        }
+
+        fetchData();
       } else {
         setToast({ message: result.message, type: 'error' });
       }
-
+    } catch (err) {
+      console.error(err);
+      setToast({ message: 'Terjadi kesalahan sistem', type: 'error' });
+    } finally {
       setBusyId(null);
+    }
+  };
 
-      if (result.supabaseOk) {
-        await fetchData();
-        if (onDataChanged) onDataChanged();
-      }
-    };
-
-    return (
-      <motion.div
-        className="ai-overlay"
-        initial={{ opacity: 0, x: '100%' }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: '100%' }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      >
-        <div className="ai-header">
-          <div className="ai-header__inner">
-            <div className="ai-header__left">
-              <span className="ai-header__icon" aria-hidden="true">🤖</span>
-              <div>
-                <h2 className="ai-header__title">Tilik AI</h2>
-                <p className="ai-header__sub">Konfirmasi kategori agar model makin paham</p>
-              </div>
+  return (
+    <motion.div
+      className="ai-overlay"
+      initial={{ opacity: 0, x: '100%' }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: '100%' }}
+      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+    >
+      <div className="ai-header">
+        <div className="ai-header__inner">
+          <div className="ai-header__left">
+            <span className="ai-header__icon" aria-hidden="true">🤖</span>
+            <div>
+              <h2 className="ai-header__title">Tilik AI</h2>
+              <p className="ai-header__sub">Konfirmasi kategori agar model makin paham</p>
             </div>
-            <button className="ai-close-btn" onClick={onClose}>✕</button>
           </div>
+          <button className="ai-close-btn" onClick={onClose}>✕</button>
         </div>
+      </div>
 
-        <div className="ai-body">
-          {loading ? (
-            <div className="ai-loader">
-              <div className="spinner-ring" />
-              <p>Memuat data transaksi…</p>
-            </div>
-          ) : (
-            <div className="ai-content">
-              <AiSummary
-                unconfirmed={unconfirmed.length}
-                confirmed={allTxs.filter((tx) => tx.is_confirmed).length}
-                avgConfidence={avgConfidence}
-              />
+      <div className="ai-body">
+        {loading ? (
+          <div className="ai-loader">
+            <div className="spinner-ring" />
+            <p>Memuat data transaksi…</p>
+          </div>
+        ) : (
+          <div className="ai-content">
+            <AiSummary
+              unconfirmed={unconfirmed.length}
+              confirmed={allTxs.filter((tx) => tx.is_confirmed).length}
+              avgConfidence={avgConfidence}
+            />
 
-              <div className="ai-section">
-                <h3 className="ai-section__title">
-                  ⏳ Belum Dikonfirmasi
-                  <span className="ai-section__badge">{unconfirmed.length}</span>
-                </h3>
+            <div className="ai-section">
+              <h3 className="ai-section__title">
+                ⏳ Belum Dikonfirmasi
+                <span className="ai-section__badge">{unconfirmed.length}</span>
+              </h3>
 
-                <div className="ai-card-list">
-                  <AnimatePresence mode="popLayout">
-                    {unconfirmed.map((tx) => (
-                      <AiConfirmationCard
-                        key={tx.id}
-                        tx={tx}
-                        onConfirm={handleConfirm}
-                        busy={busyId === tx.id}
-                      />
-                    ))}
-                  </AnimatePresence>
-                  {unconfirmed.length === 0 && (
-                    <motion.div className="ai-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                      <span aria-hidden="true">🎉</span>
-                      <p>Semua transaksi sudah dikonfirmasi!</p>
-                    </motion.div>
-                  )}
-                </div>
+              <div className="ai-card-list">
+                <AnimatePresence mode="popLayout">
+                  {unconfirmed.map((tx) => (
+                    <AiConfirmationCard
+                      key={tx.id}
+                      tx={tx}
+                      onConfirm={handleConfirm}
+                      busy={busyId === tx.id}
+                    />
+                  ))}
+                </AnimatePresence>
+                {unconfirmed.length === 0 && (
+                  <motion.div className="ai-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <span aria-hidden="true">🎉</span>
+                    <p>Semua transaksi sudah dikonfirmasi!</p>
+                  </motion.div>
+                )}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
 
-        <AnimatePresence>
-          {toast && (
-            <Toast
-              message={toast.message}
-              type={toast.type}
-              onDone={() => setToast(null)}
-            />
-          )}
-        </AnimatePresence>
-      </motion.div>
-    );
-  }
+      <AnimatePresence>
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onDone={() => setToast(null)}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}

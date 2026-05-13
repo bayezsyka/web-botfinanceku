@@ -8,6 +8,14 @@ export const CATEGORY_COLUMN = 'subject';     // kolom kategori/subjek
 export const NOTE_COLUMN = 'subject';         // kolom catatan (sama dengan subject di schema ini)
 export const TYPE_COLUMN = null;              // null = tabel hanya pengeluaran, tidak ada kolom type
 
+function applyWorkspaceFilter(query, workspaceId) {
+  if (!workspaceId) {
+    return query;
+  }
+
+  return query.eq('workspace_id', workspaceId);
+}
+
 function mapExpenseRow(row) {
   const finalCategory =
     row.confirmed_category ||
@@ -37,15 +45,19 @@ function mapExpenseRow(row) {
 /**
  * Ambil semua pengeluaran pada tanggal tertentu, urut terbaru ke lama.
  * @param {string} date - format YYYY-MM-DD
+ * @param {string | null | undefined} workspaceId
  * @returns {Promise<Array>}
  */
-export async function getExpensesByDate(date) {
+export async function getExpensesByDate(date, workspaceId) {
   console.log('Fetching for date:', date);
-  let query = supabase
+  let query = applyWorkspaceFilter(
+    supabase
     .from(TABLE_NAME)
     .select('*')
     .eq(DATE_COLUMN, date)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false }),
+    workspaceId
+  );
 
   if (TYPE_COLUMN) {
     query = query.eq(TYPE_COLUMN, 'expense');
@@ -65,15 +77,19 @@ export async function getExpensesByDate(date) {
  * Ambil semua pengeluaran dalam rentang tanggal (inklusif).
  * @param {string} startDate - format YYYY-MM-DD
  * @param {string} endDate   - format YYYY-MM-DD
+ * @param {string | null | undefined} workspaceId
  * @returns {Promise<Array>}
  */
-export async function getExpensesByRange(startDate, endDate) {
-  let query = supabase
+export async function getExpensesByRange(startDate, endDate, workspaceId) {
+  let query = applyWorkspaceFilter(
+    supabase
     .from(TABLE_NAME)
     .select('*')
     .gte(DATE_COLUMN, startDate)
     .lte(DATE_COLUMN, endDate)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true }),
+    workspaceId
+  );
 
   if (TYPE_COLUMN) {
     query = query.eq(TYPE_COLUMN, 'expense');
@@ -92,14 +108,18 @@ export async function getExpensesByRange(startDate, endDate) {
  * Ambil semua transaksi (tanpa filter tanggal) — dipakai oleh panel AI.
  * Urut terbaru dulu, max `limit` baris.
  * @param {number} limit
+ * @param {string | null | undefined} workspaceId
  * @returns {Promise<Array>}
  */
-export async function getAllExpenses(limit = 200) {
-  let query = supabase
+export async function getAllExpenses(limit = 200, workspaceId) {
+  let query = applyWorkspaceFilter(
+    supabase
     .from(TABLE_NAME)
     .select('*')
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .limit(limit),
+    workspaceId
+  );
 
   if (TYPE_COLUMN) {
     query = query.eq(TYPE_COLUMN, 'expense');

@@ -1,37 +1,54 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { getExpensesByDate } from './lib/transactions.js';
-import { formatRupiah, formatTanggalIndonesia, formatJam, toDateString } from './lib/formatters.js';
+import {
+  formatRupiah,
+  formatTanggalIndonesia,
+  formatJam,
+  toDateString,
+} from './lib/formatters.js';
+import { getInitialSession, listenToAuthChanges, signInWithGoogle, signOutUser } from './lib/auth.js';
+import { ensureUserWorkspace } from './lib/workspace.js';
 import AnalysisPage from './AnalysisPage.jsx';
 import AiPanel from './components/AiPanel.jsx';
+import LoginPage from './components/LoginPage.jsx';
+import UserMenu from './components/UserMenu.jsx';
 
-/* ─── Helper ─── */
 function getTodayStr() {
   return toDateString(new Date());
 }
 
 function offsetDate(dateStr, days) {
-  const d = new Date(dateStr + 'T12:00:00'); // Noon to avoid DST edge
-  d.setDate(d.getDate() + days);
-  return toDateString(d);
+  const nextDate = new Date(`${dateStr}T12:00:00`);
+  nextDate.setDate(nextDate.getDate() + days);
+  return toDateString(nextDate);
 }
 
-/* ─── HEADER ─── */
-function Header() {
+function Header({ user, workspace, onLogout, logoutLoading }) {
   return (
     <header className="app-header" role="banner">
-      <div className="app-header__inner">
-        <span className="app-header__icon" aria-hidden="true">💰</span>
-        <div>
-          <h1 className="app-header__title">Riwayat Pengeluaran</h1>
-          <p className="app-header__subtitle">Catatan pengeluaran harian</p>
+      <div className="app-header__inner app-header__inner--spread">
+        <div className="app-header__brand">
+          <span className="app-header__icon" aria-hidden="true">BF</span>
+          <div>
+            <h1 className="app-header__title">Riwayat Pengeluaran</h1>
+            <p className="app-header__subtitle">Catatan pengeluaran harian</p>
+          </div>
         </div>
+
+        {user ? (
+          <UserMenu
+            user={user}
+            workspace={workspace}
+            onLogout={onLogout}
+            loading={logoutLoading}
+          />
+        ) : null}
       </div>
     </header>
   );
 }
 
-/* ─── DATE NAV ─── */
 function DateNav({ selectedDate, onDateChange }) {
   const today = getTodayStr();
   const isToday = selectedDate === today;
@@ -46,7 +63,7 @@ function DateNav({ selectedDate, onDateChange }) {
           onClick={() => onDateChange(offsetDate(selectedDate, -1))}
           aria-label="Tanggal sebelumnya"
         >
-          ‹ Sebelumnya
+          Sebelumnya
         </button>
 
         <button
@@ -66,19 +83,19 @@ function DateNav({ selectedDate, onDateChange }) {
           aria-label="Tanggal berikutnya"
           disabled={isFuture}
         >
-          Berikutnya ›
+          Berikutnya
         </button>
       </div>
 
       <label className="date-nav__label" htmlFor="date-picker">
-        <span aria-hidden="true">📅</span> Pilih Tanggal:
+        <span aria-hidden="true">Tanggal:</span>
         <input
           id="date-picker"
           type="date"
           className="date-nav__input"
           value={selectedDate}
           max={today}
-          onChange={(e) => e.target.value && onDateChange(e.target.value)}
+          onChange={(event) => event.target.value && onDateChange(event.target.value)}
           aria-label="Pilih tanggal manual"
         />
       </label>
@@ -86,12 +103,11 @@ function DateNav({ selectedDate, onDateChange }) {
   );
 }
 
-/* ─── SUMMARY CARDS ─── */
 function SummaryCards({ transactions }) {
-  const total = transactions.reduce((sum, t) => sum + t.amount, 0);
+  const total = transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
   const count = transactions.length;
-  const biggest = count > 0 ? Math.max(...transactions.map((t) => t.amount)) : 0;
-  const biggestTx = transactions.find((t) => t.amount === biggest);
+  const biggestAmount = count > 0 ? Math.max(...transactions.map((transaction) => transaction.amount)) : 0;
+  const biggestTransaction = transactions.find((transaction) => transaction.amount === biggestAmount);
 
   return (
     <section className="summary" aria-label="Ringkasan pengeluaran">
@@ -99,48 +115,53 @@ function SummaryCards({ transactions }) {
         <p className="summary__label">Total Pengeluaran</p>
         <p className="summary__value">{formatRupiah(total)}</p>
       </div>
+
       <div className="summary__card">
         <p className="summary__label">Jumlah Transaksi</p>
         <p className="summary__value summary__value--sm">{count} transaksi</p>
       </div>
+
       <div className="summary__card">
         <p className="summary__label">Terbesar</p>
         <p className="summary__value summary__value--sm">
-          {biggestTx ? formatRupiah(biggestTx.amount) : '—'}
+          {biggestTransaction ? formatRupiah(biggestTransaction.amount) : '-'}
         </p>
-        {biggestTx && (
-          <p className="summary__value-note">{biggestTx.category}</p>
-        )}
+        {biggestTransaction ? (
+          <p className="summary__value-note">{biggestTransaction.category}</p>
+        ) : null}
       </div>
     </section>
   );
 }
 
-/* ─── TRANSACTION ITEM ─── */
-function TransactionItem({ tx }) {
+function TransactionItem({ transaction }) {
   return (
-    <li className="tx-item" role="article" aria-label={`${tx.category} ${formatRupiah(tx.amount)}`}>
+    <li
+      className="tx-item"
+      role="article"
+      aria-label={`${transaction.category} ${formatRupiah(transaction.amount)}`}
+    >
       <div className="tx-item__left">
-        <span className="tx-item__icon" aria-hidden="true">🧾</span>
+        <span className="tx-item__icon" aria-hidden="true">Rp</span>
         <div>
-          <p className="tx-item__category">{tx.category}</p>
-          {tx.subject && tx.subject !== tx.category && (
-            <p className="tx-item__note">{tx.subject}</p>
-          )}
-          <p className="tx-item__time">{formatJam(tx.createdAt)}</p>
+          <p className="tx-item__category">{transaction.category}</p>
+          {transaction.subject && transaction.subject !== transaction.category ? (
+            <p className="tx-item__note">{transaction.subject}</p>
+          ) : null}
+          <p className="tx-item__time">{formatJam(transaction.createdAt)}</p>
         </div>
       </div>
-      <p className="tx-item__amount">{formatRupiah(tx.amount)}</p>
+
+      <p className="tx-item__amount">{formatRupiah(transaction.amount)}</p>
     </li>
   );
 }
 
-/* ─── TRANSACTION LIST ─── */
 function TransactionList({ transactions }) {
   if (transactions.length === 0) {
     return (
       <div className="empty-state" role="status">
-        <span className="empty-state__icon" aria-hidden="true">🗂️</span>
+        <span className="empty-state__icon" aria-hidden="true">Rp</span>
         <p>Belum ada pengeluaran pada tanggal ini.</p>
       </div>
     );
@@ -150,94 +171,328 @@ function TransactionList({ transactions }) {
     <section className="tx-list-section" aria-label="Daftar pengeluaran">
       <h2 className="tx-list__heading">Rincian Transaksi</h2>
       <ul className="tx-list" role="list">
-        {transactions.map((tx) => (
-          <TransactionItem key={tx.id} tx={tx} />
+        {transactions.map((transaction) => (
+          <TransactionItem key={transaction.id} transaction={transaction} />
         ))}
       </ul>
     </section>
   );
 }
 
-/* ─── LOADING STATE ─── */
-function LoadingState() {
+function LoadingState({ message }) {
   return (
     <div className="loading-state" role="status" aria-live="polite">
       <div className="loading-state__spinner" aria-hidden="true">
         <div className="spinner-ring" />
       </div>
-      <p>Memuat data pengeluaran…</p>
+      <p>{message}</p>
     </div>
   );
 }
 
-/* ─── ERROR STATE ─── */
-function ErrorState({ onRetry }) {
+function ErrorState({ message, onRetry, retryLabel = 'Coba Lagi', secondaryAction, secondaryLabel }) {
   return (
     <div className="error-state" role="alert">
-      <span className="error-state__icon" aria-hidden="true">⚠️</span>
-      <p>Data belum bisa dimuat.</p>
-      <button id="btn-retry" className="error-state__btn" onClick={onRetry}>
-        Coba Lagi
-      </button>
+      <span className="error-state__icon" aria-hidden="true">!</span>
+      <p>{message}</p>
+      <div className="error-state__actions">
+        {onRetry ? (
+          <button id="btn-retry" className="error-state__btn" onClick={onRetry}>
+            {retryLabel}
+          </button>
+        ) : null}
+
+        {secondaryAction ? (
+          <button
+            type="button"
+            className="error-state__btn error-state__btn--secondary"
+            onClick={secondaryAction}
+          >
+            {secondaryLabel}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-/* ─── APP ROOT ─── */
 export default function App() {
   const [selectedDate, setSelectedDate] = useState(getTodayStr);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [dataError, setDataError] = useState('');
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
 
-  const loadData = useCallback(async (date) => {
+  const [session, setSession] = useState(null);
+  const [user, setUser] = useState(null);
+  const [activeWorkspace, setActiveWorkspace] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState('');
+  const [workspaceRefreshToken, setWorkspaceRefreshToken] = useState(0);
+
+  const clearDashboardState = useCallback(() => {
+    setSelectedDate(getTodayStr());
+    setTransactions([]);
+    setAnalysisOpen(false);
+    setAiOpen(false);
+    setDataError('');
     setLoading(true);
-    setError(false);
-    try {
-      const data = await getExpensesByDate(date);
-      setTransactions(data);
-    } catch (err) {
-      console.error('Failed to load transactions:', err);
-      setError(true);
+  }, []);
+
+  const loadData = useCallback(async (date) => {
+    const workspaceId = activeWorkspace?.id;
+    if (!workspaceId) {
       setTransactions([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setDataError('');
+
+    try {
+      const nextTransactions = await getExpensesByDate(date, workspaceId);
+      setTransactions(nextTransactions);
+    } catch (error) {
+      console.error('Failed to load transactions:', error);
+      setTransactions([]);
+      setDataError(error.message || 'Data belum bisa dimuat.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeWorkspace?.id]);
 
   useEffect(() => {
-    loadData(selectedDate);
-  }, [selectedDate, loadData]);
+    let isMounted = true;
 
-  const handleDateChange = (newDate) => {
-    setSelectedDate(newDate);
+    async function bootstrapSession() {
+      setAuthLoading(true);
+      setAuthError('');
+
+      try {
+        const nextSession = await getInitialSession();
+        if (!isMounted) {
+          return;
+        }
+
+        setSession(nextSession);
+        setUser(nextSession?.user ?? null);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setAuthError(error.message || 'Gagal memeriksa sesi login.');
+      } finally {
+        if (isMounted) {
+          setAuthLoading(false);
+        }
+      }
+    }
+
+    const {
+      data: { subscription },
+    } = listenToAuthChanges((nextSession) => {
+      if (!isMounted) {
+        return;
+      }
+
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+      setAuthError('');
+
+      if (!nextSession) {
+        setActiveWorkspace(null);
+        setWorkspaceError('');
+        setWorkspaceLoading(false);
+        clearDashboardState();
+      }
+    });
+
+    bootstrapSession();
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [clearDashboardState]);
+
+  useEffect(() => {
+    if (!session?.user) {
+      setActiveWorkspace(null);
+      setWorkspaceLoading(false);
+      setWorkspaceError('');
+      return;
+    }
+
+    let ignore = false;
+
+    async function prepareWorkspace() {
+      setWorkspaceLoading(true);
+      setWorkspaceError('');
+
+      try {
+        const workspace = await ensureUserWorkspace(session.user);
+        if (!ignore) {
+          setActiveWorkspace(workspace);
+        }
+      } catch (error) {
+        console.error('Failed to ensure workspace:', error);
+        if (!ignore) {
+          setActiveWorkspace(null);
+          setWorkspaceError(error.message || 'Gagal menyiapkan workspace.');
+        }
+      } finally {
+        if (!ignore) {
+          setWorkspaceLoading(false);
+        }
+      }
+    }
+
+    prepareWorkspace();
+
+    return () => {
+      ignore = true;
+    };
+  }, [session, workspaceRefreshToken]);
+
+  useEffect(() => {
+    if (!user || !activeWorkspace || workspaceLoading) {
+      return;
+    }
+
+    loadData(selectedDate);
+  }, [selectedDate, user, activeWorkspace, workspaceLoading, loadData]);
+
+  const handleDateChange = (nextDate) => {
+    setSelectedDate(nextDate);
   };
 
-  // Callback saat AI panel selesai konfirmasi — refresh dashboard
   const handleAiDataChanged = useCallback(() => {
     loadData(selectedDate);
   }, [loadData, selectedDate]);
 
+  const handleLogin = async () => {
+    setLoginLoading(true);
+    setAuthError('');
+
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      setAuthError(error.message || 'Gagal memulai login Google.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setLogoutLoading(true);
+    setAuthError('');
+    setWorkspaceError('');
+
+    try {
+      await signOutUser();
+      setSession(null);
+      setUser(null);
+      setActiveWorkspace(null);
+      clearDashboardState();
+    } catch (error) {
+      setAuthError(error.message || 'Gagal logout.');
+    } finally {
+      setLogoutLoading(false);
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div className="auth-shell">
+        <main className="status-page">
+          <LoadingState message="Memeriksa sesi..." />
+        </main>
+      </div>
+    );
+  }
+
+  if (!session?.user) {
+    return (
+      <LoginPage
+        onLogin={handleLogin}
+        loading={loginLoading}
+        error={authError}
+      />
+    );
+  }
+
+  if (workspaceLoading && !activeWorkspace) {
+    return (
+      <div className="app-wrapper">
+        <Header
+          user={user}
+          workspace={null}
+          onLogout={handleLogout}
+          logoutLoading={logoutLoading}
+        />
+
+        <main className="app-main status-page">
+          <LoadingState message="Menyiapkan ruang keuangan..." />
+        </main>
+      </div>
+    );
+  }
+
+  if (workspaceError && !activeWorkspace) {
+    return (
+      <div className="app-wrapper">
+        <Header
+          user={user}
+          workspace={null}
+          onLogout={handleLogout}
+          logoutLoading={logoutLoading}
+        />
+
+        <main className="app-main status-page">
+          <ErrorState
+            message={workspaceError}
+            onRetry={() => setWorkspaceRefreshToken((value) => value + 1)}
+            secondaryAction={handleLogout}
+            secondaryLabel="Logout"
+          />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app-wrapper">
-      <Header />
+      <Header
+        user={user}
+        workspace={activeWorkspace}
+        onLogout={handleLogout}
+        logoutLoading={logoutLoading}
+      />
 
       <main id="main-content" className="app-main">
-        {/* Tanggal yang dipilih */}
+        {authError ? (
+          <p className="app-inline-alert" role="alert">
+            {authError}
+          </p>
+        ) : null}
+
         <p className="selected-date-label" aria-live="polite">
-          {formatTanggalIndonesia(selectedDate + 'T12:00:00')}
+          {formatTanggalIndonesia(`${selectedDate}T12:00:00`)}
         </p>
 
-        {/* Navigasi tanggal */}
         <DateNav selectedDate={selectedDate} onDateChange={handleDateChange} />
 
-        {/* Konten utama */}
         {loading ? (
-          <LoadingState />
-        ) : error ? (
-          <ErrorState onRetry={() => loadData(selectedDate)} />
+          <LoadingState message="Memuat data pengeluaran..." />
+        ) : dataError ? (
+          <ErrorState message={dataError} onRetry={() => loadData(selectedDate)} />
         ) : (
           <>
             <SummaryCards transactions={transactions} />
@@ -247,12 +502,10 @@ export default function App() {
       </main>
 
       <footer className="app-footer" role="contentinfo">
-        <p>© {new Date().getFullYear()} BotFinanceku</p>
+        <p>&copy; {new Date().getFullYear()} BotFinanceku</p>
       </footer>
 
-      {/* FAB Group */}
       <div className="fab-group">
-        {/* FAB — AI */}
         <button
           id="btn-open-ai"
           className="fab-ai"
@@ -260,7 +513,18 @@ export default function App() {
           aria-label="Buka panel Tilik AI"
           title="Tilik AI"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
             <path d="M12 2a4 4 0 0 1 4 4v1h1a3 3 0 0 1 3 3v1a3 3 0 0 1-3 3h-1v4a4 4 0 0 1-8 0v-4H7a3 3 0 0 1-3-3v-1a3 3 0 0 1 3-3h1V6a4 4 0 0 1 4-4z" />
             <circle cx="9.5" cy="10" r="1" fill="currentColor" />
             <circle cx="14.5" cy="10" r="1" fill="currentColor" />
@@ -269,7 +533,6 @@ export default function App() {
           <span className="fab-ai__label">AI</span>
         </button>
 
-        {/* FAB — Analysis */}
         <button
           id="btn-open-analysis"
           className="fab-analysis"
@@ -277,31 +540,44 @@ export default function App() {
           aria-label="Buka analisis keuangan"
           title="Analisis Keuangan"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
             <line x1="18" y1="20" x2="18" y2="10" />
             <line x1="12" y1="20" x2="12" y2="4" />
-            <line x1="6"  y1="20" x2="6"  y2="14" />
+            <line x1="6" y1="20" x2="6" y2="14" />
             <polyline points="2 20 22 20" />
           </svg>
           <span className="fab-analysis__label">Analisis</span>
         </button>
       </div>
 
-      {/* Analysis overlay */}
       <AnimatePresence>
-        {analysisOpen && (
-          <AnalysisPage onClose={() => setAnalysisOpen(false)} />
-        )}
+        {analysisOpen ? (
+          <AnalysisPage 
+            onClose={() => setAnalysisOpen(false)} 
+            workspaceId={activeWorkspace?.id}
+          />
+        ) : null}
       </AnimatePresence>
 
-      {/* AI overlay */}
       <AnimatePresence>
-        {aiOpen && (
+        {aiOpen ? (
           <AiPanel
             onClose={() => setAiOpen(false)}
             onDataChanged={handleAiDataChanged}
+            workspaceId={activeWorkspace?.id}
           />
-        )}
+        ) : null}
       </AnimatePresence>
     </div>
   );

@@ -136,23 +136,29 @@ function AiConfirmationCard({ tx, onConfirm, busy }) {
 }
 
 /* ─── MAIN PANEL ─── */
-export default function AiPanel({ onClose, onDataChanged }) {
+export default function AiPanel({ onClose, onDataChanged, workspaceId }) {
   const [allTxs, setAllTxs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [toast, setToast] = useState(null);
 
   const fetchData = useCallback(async () => {
+    if (!workspaceId) {
+      setAllTxs([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const data = await getAllExpenses(200);
+      const data = await getAllExpenses(200, workspaceId);
       setAllTxs(data);
     } catch (err) {
       console.error('Failed to load AI data:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     fetchData();

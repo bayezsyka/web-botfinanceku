@@ -461,7 +461,7 @@ function MonthlyAnalysis({ monthlyByMonth, today }) {
 
 /* ─── MAIN COMPONENT ─── */
 
-export default function AnalysisPage({ onClose }) {
+export default function AnalysisPage({ onClose, workspaceId }) {
   const today = getTodayStr();
   const [activeTab, setActiveTab] = useState('harian');
   
@@ -474,18 +474,23 @@ export default function AnalysisPage({ onClose }) {
 
   useEffect(() => {
     async function fetchData() {
+      if (!workspaceId) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       try {
         // Fetch Daily & Weekly
         const [d, w] = await Promise.all([
-          getExpensesByRange(today, today),
-          getExpensesByRange(getWeekRange(today).start, today)
+          getExpensesByRange(today, today, workspaceId),
+          getExpensesByRange(getWeekRange(today).start, today, workspaceId)
         ]);
 
         // Fetch Monthly (Last 6 Months)
         const now = new Date();
         const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-        const m = await getExpensesByRange(toDateString(sixMonthsAgo), today);
+        const m = await getExpensesByRange(toDateString(sixMonthsAgo), today, workspaceId);
         
         const groupedMonthly = {};
         m.forEach(tx => {
@@ -503,7 +508,7 @@ export default function AnalysisPage({ onClose }) {
       }
     }
     fetchData();
-  }, [today]);
+  }, [today, workspaceId]);
 
   const tabs = [
     { key: 'harian', label: 'Hari Ini', icon: Clock },

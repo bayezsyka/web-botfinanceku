@@ -11,6 +11,7 @@ import { getInitialSession, listenToAuthChanges, signInWithGoogle, signOutUser }
 import { ensureUserWorkspace } from './lib/workspace.js';
 import AnalysisPage from './AnalysisPage.jsx';
 import AiPanel from './components/AiPanel.jsx';
+import WhatsappSettingsPanel from './components/WhatsappSettingsPanel.jsx';
 import LoginPage from './components/LoginPage.jsx';
 import UserMenu from './components/UserMenu.jsx';
 
@@ -223,6 +224,7 @@ export default function App() {
   const [dataError, setDataError] = useState('');
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [whatsappOpen, setWhatsappOpen] = useState(false);
 
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
@@ -240,6 +242,7 @@ export default function App() {
     setTransactions([]);
     setAnalysisOpen(false);
     setAiOpen(false);
+    setWhatsappOpen(false);
     setDataError('');
     setLoading(true);
   }, []);
@@ -507,6 +510,30 @@ export default function App() {
 
       <div className="fab-group">
         <button
+          id="btn-open-whatsapp"
+          className="fab-wa"
+          onClick={() => setWhatsappOpen(true)}
+          aria-label="Hubungkan WhatsApp"
+          title="WhatsApp"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-11.7 8.38 8.38 0 0 1 3.8.9L21 3z" />
+          </svg>
+          <span className="fab-wa__label">WhatsApp</span>
+        </button>
+
+        <button
           id="btn-open-ai"
           className="fab-ai"
           onClick={() => setAiOpen(true)}
@@ -575,6 +602,15 @@ export default function App() {
           <AiPanel
             onClose={() => setAiOpen(false)}
             onDataChanged={handleAiDataChanged}
+            workspaceId={activeWorkspace?.id}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {whatsappOpen ? (
+          <WhatsappSettingsPanel
+            onClose={() => setWhatsappOpen(false)}
             workspaceId={activeWorkspace?.id}
           />
         ) : null}

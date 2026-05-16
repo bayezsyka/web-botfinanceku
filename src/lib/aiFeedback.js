@@ -1,8 +1,16 @@
 export const VALID_CATEGORIES = [
-  'makan & minum',
+  'makan',
   'jajan',
-  'operasional',
-  'dan lain-lain',
+  'kebutuhan_kos',
+  'tagihan',
+  'laundry',
+  'transportasi',
+  'kesehatan',
+  'hiburan',
+  'sosial',
+  'belanja_pribadi',
+  'edukasi',
+  'lain_lain',
 ];
 
 export async function confirmTransactionCategory(transaction, category) {

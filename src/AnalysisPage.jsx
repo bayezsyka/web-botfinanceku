@@ -11,7 +11,7 @@ import {
   ArrowUpRight, ArrowDownRight, BarChart3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getExpensesByRange } from './lib/transactions.js';
+import { getExpensesByRange, formatCategoryDisplay } from './lib/transactions.js';
 import { formatRupiah, toDateString } from './lib/formatters.js';
 
 /* ─── Constants & Colors ─── */
@@ -81,7 +81,7 @@ function AIInsightCard({ txs, type = 'daily', monthlyData = [] }) {
     const catMap = {};
     txs.forEach(t => catMap[t.category] = (catMap[t.category] || 0) + t.amount);
     const sortedCats = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
-    const topCat = sortedCats[0];
+    const topCat = sortedCats[0] ? [formatCategoryDisplay(sortedCats[0][0]), sortedCats[0][1]] : ['Lainnya', 0];
     
     if (type === 'daily') {
       if (total > 500000) return `Waduh, hari ini pengeluaranmu tembus ${formatRupiah(total)}. Terbesar di kategori ${topCat[0]}. Coba dikurangi besok ya!`;
@@ -151,7 +151,7 @@ function DailyAnalysis({ txs }) {
     const map = {};
     txs.forEach(t => map[t.category] = (map[t.category] || 0) + t.amount);
     return Object.entries(map)
-      .map(([name, value]) => ({ name, value }))
+      .map(([name, value]) => ({ name: formatCategoryDisplay(name), value }))
       .sort((a, b) => b.value - a.value);
   }, [txs]);
 
@@ -245,10 +245,12 @@ function DailyAnalysis({ txs }) {
           {[...txs].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((tx) => (
             <div key={tx.id} className="tx-mini-item">
               <div className="tx-mini-item__left">
-                <span className="tx-mini-item__cat">{tx.category}</span>
+                <span className="tx-mini-item__cat" style={{ textTransform: 'capitalize' }}>
+                  {formatCategoryDisplay(tx.category)}
+                </span>
                 <span className="tx-mini-item__time">
                   {new Date(tx.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                  {tx.note && ` • ${tx.note}`}
+                  {tx.displayTitle && ` • ${tx.displayTitle}`}
                 </span>
               </div>
               <span className="tx-mini-item__amount">{formatRupiah(tx.amount)}</span>
@@ -280,7 +282,7 @@ function WeeklyAnalysis({ txs, today }) {
     const map = {};
     txs.forEach(t => map[t.category] = (map[t.category] || 0) + t.amount);
     return Object.entries(map)
-      .map(([name, value]) => ({ name, value }))
+      .map(([name, value]) => ({ name: formatCategoryDisplay(name), value }))
       .sort((a, b) => b.value - a.value);
   }, [txs]);
 
@@ -336,7 +338,9 @@ function WeeklyAnalysis({ txs, today }) {
           <div className="category-chart">
             {categoryData.slice(0, 5).map((cat, i) => (
               <div key={cat.name} className="category-chart__row" style={{ gridTemplateColumns: '100px 1fr 100px' }}>
-                <span className="category-chart__name">{cat.name}</span>
+                <span className="category-chart__name" style={{ textTransform: 'capitalize' }}>
+                  {cat.name}
+                </span>
                 <div className="spark-bar-track">
                   <motion.div 
                     className="spark-bar-fill"
@@ -383,7 +387,7 @@ function MonthlyAnalysis({ monthlyByMonth, today }) {
     const map = {};
     currentMonthTxs.forEach(t => map[t.category] = (map[t.category] || 0) + t.amount);
     return Object.entries(map)
-      .map(([name, value]) => ({ name, value }))
+      .map(([name, value]) => ({ name: formatCategoryDisplay(name), value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
   }, [monthlyByMonth, currentMonthKey]);
@@ -438,7 +442,9 @@ function MonthlyAnalysis({ monthlyByMonth, today }) {
             ) : (
               topCategories.map((cat, i) => (
                 <div key={cat.name} className="category-chart__row" style={{ gridTemplateColumns: '100px 1fr 100px' }}>
-                  <span className="category-chart__name">{cat.name}</span>
+                  <span className="category-chart__name" style={{ textTransform: 'capitalize' }}>
+                    {cat.name}
+                  </span>
                   <div className="spark-bar-track">
                     <motion.div 
                       className="spark-bar-fill"

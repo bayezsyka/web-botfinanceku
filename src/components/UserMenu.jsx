@@ -7,8 +7,8 @@ function getAvatarFallback(user) {
   return (name[0] || 'P').toUpperCase();
 }
 
-export default function UserMenu({ user, workspace, onLogout, loading }) {
-  const displayName = getDisplayName(user);
+export default function UserMenu({ user, profile, workspace, onLogout, loading }) {
+  const displayName = profile?.display_name || user?.user_metadata?.full_name || user?.email || 'Pengguna';
   const avatarUrl = user?.user_metadata?.avatar_url;
 
   return (

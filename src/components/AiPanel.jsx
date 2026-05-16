@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getAllExpenses } from '../lib/transactions.js';
 import { confirmTransactionCategory, VALID_CATEGORIES } from '../lib/aiFeedback.js';
+import { formatCategoryDisplay } from '../lib/transactions.js';
 import { formatRupiah } from '../lib/formatters.js';
 
 /* ─── Toast ─── */
@@ -88,7 +89,7 @@ function AiConfirmationCard({ tx, onConfirm, busy }) {
     >
       <div className="ai-card__header">
         <div className="ai-card__info">
-          <p className="ai-card__subject">{tx.subject || '(tanpa nama)'}</p>
+          <p className="ai-card__subject">{tx.displayTitle || '(tanpa nama)'}</p>
           <p className="ai-card__amount">{formatRupiah(tx.amount)}</p>
           {displayDate && <p className="ai-card__date">{displayDate}</p>}
         </div>
@@ -96,7 +97,9 @@ function AiConfirmationCard({ tx, onConfirm, busy }) {
           {hasPrediction ? (
             <>
               <span className="ai-card__pred-label">Prediksi AI:</span>
-              <span className="ai-card__pred-value">{tx.predicted_category}</span>
+              <span className="ai-card__pred-value" style={{ textTransform: 'capitalize' }}>
+                {formatCategoryDisplay(tx.predicted_category)}
+              </span>
             </>
           ) : (
             <span className="ai-card__pred-label ai-card__pred-label--none">Belum diprediksi</span>
@@ -124,10 +127,11 @@ function AiConfirmationCard({ tx, onConfirm, busy }) {
           <button
             key={cat}
             className="ai-cat-btn"
+            style={{ textTransform: 'capitalize' }}
             disabled={busy}
             onClick={() => onConfirm(tx, cat)}
           >
-            {cat}
+            {formatCategoryDisplay(cat)}
           </button>
         ))}
       </div>

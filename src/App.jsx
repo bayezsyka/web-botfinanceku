@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { getExpensesByDate } from './lib/transactions.js';
+import { getExpensesByDate, formatCategoryDisplay } from './lib/transactions.js';
 import {
   formatRupiah,
   formatTanggalIndonesia,
@@ -12,6 +12,8 @@ import { ensureUserWorkspace } from './lib/workspace.js';
 import AnalysisPage from './AnalysisPage.jsx';
 import AiPanel from './components/AiPanel.jsx';
 import WhatsappSettingsPanel from './components/WhatsappSettingsPanel.jsx';
+import ProfilePanel from './components/ProfilePanel.jsx';
+import { getMyProfile } from './lib/profile.js';
 import LoginPage from './components/LoginPage.jsx';
 import UserMenu from './components/UserMenu.jsx';
 
@@ -25,7 +27,7 @@ function offsetDate(dateStr, days) {
   return toDateString(nextDate);
 }
 
-function Header({ user, workspace, onLogout, logoutLoading }) {
+function Header({ user, profile, workspace, onLogout, logoutLoading }) {
   return (
     <header className="app-header" role="banner">
       <div className="app-header__inner app-header__inner--spread">
@@ -40,6 +42,7 @@ function Header({ user, workspace, onLogout, logoutLoading }) {
         {user ? (
           <UserMenu
             user={user}
+            profile={profile}
             workspace={workspace}
             onLogout={onLogout}
             loading={logoutLoading}
@@ -128,7 +131,9 @@ function SummaryCards({ transactions }) {
           {biggestTransaction ? formatRupiah(biggestTransaction.amount) : '-'}
         </p>
         {biggestTransaction ? (
-          <p className="summary__value-note">{biggestTransaction.category}</p>
+          <p className="summary__value-note" style={{ textTransform: 'capitalize' }}>
+            {formatCategoryDisplay(biggestTransaction.category)}
+          </p>
         ) : null}
       </div>
     </section>
@@ -140,16 +145,19 @@ function TransactionItem({ transaction }) {
     <li
       className="tx-item"
       role="article"
-      aria-label={`${transaction.category} ${formatRupiah(transaction.amount)}`}
+      aria-label={`${formatCategoryDisplay(transaction.category)} ${formatRupiah(transaction.amount)}`}
     >
       <div className="tx-item__left">
         <span className="tx-item__icon" aria-hidden="true">Rp</span>
         <div>
-          <p className="tx-item__category">{transaction.category}</p>
-          {transaction.subject && transaction.subject !== transaction.category ? (
-            <p className="tx-item__note">{transaction.subject}</p>
-          ) : null}
-          <p className="tx-item__time">{formatJam(transaction.createdAt)}</p>
+          <p className="tx-item__category" style={{ textTransform: 'capitalize' }}>
+            {formatCategoryDisplay(transaction.category)}
+          </p>
+          <p className="tx-item__note">{transaction.displayTitle}</p>
+          <p className="tx-item__time">
+            {formatJam(transaction.createdAt)}
+            {transaction.isConfirmed ? ' • Sudah dikoreksi' : ' • Prediksi'}
+          </p>
         </div>
       </div>
 
@@ -225,9 +233,11 @@ export default function App() {
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginLoading, setLoginLoading] = useState(false);
@@ -243,6 +253,8 @@ export default function App() {
     setAnalysisOpen(false);
     setAiOpen(false);
     setWhatsappOpen(false);
+    setProfileOpen(false);
+    setProfile(null);
     setDataError('');
     setLoading(true);
   }, []);
@@ -372,6 +384,27 @@ export default function App() {
     loadData(selectedDate);
   }, [selectedDate, user, activeWorkspace, workspaceLoading, loadData]);
 
+  useEffect(() => {
+    if (!user) {
+      setProfile(null);
+      return;
+    }
+
+    let ignore = false;
+    async function fetchProfile() {
+      try {
+        const data = await getMyProfile(user.id);
+        if (!ignore) {
+          setProfile(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch profile in App:', err);
+      }
+    }
+    fetchProfile();
+    return () => { ignore = true; };
+  }, [user]);
+
   const handleDateChange = (nextDate) => {
     setSelectedDate(nextDate);
   };
@@ -431,11 +464,35 @@ export default function App() {
     );
   }
 
+  if (session.user.email !== 'farrosy6@gmail.com') {
+    return (
+      <div className="auth-shell">
+        <main className="status-page" style={{ padding: '2rem', textAlign: 'center' }}>
+          <span aria-hidden="true" style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem' }}>⚠️</span>
+          <h2 style={{ marginBottom: '1rem', color: 'var(--clr-text)' }}>Akses Ditolak</h2>
+          <p style={{ lineHeight: '1.6', marginBottom: '2rem', color: 'var(--clr-text-muted)' }}>
+            BotFinanceku sedang dikembangkan.<br/>
+            Saat ini akses hanya dibuka untuk akun pengembang.<br/>
+            Silakan hubungi Farros sebagai developer apabila membutuhkan akses.
+          </p>
+          <button 
+            className="error-state__btn" 
+            onClick={handleLogout}
+            disabled={logoutLoading}
+          >
+            {logoutLoading ? 'Keluar...' : 'Keluar'}
+          </button>
+        </main>
+      </div>
+    );
+  }
+
   if (workspaceLoading && !activeWorkspace) {
     return (
       <div className="app-wrapper">
         <Header
           user={user}
+          profile={profile}
           workspace={null}
           onLogout={handleLogout}
           logoutLoading={logoutLoading}
@@ -453,6 +510,7 @@ export default function App() {
       <div className="app-wrapper">
         <Header
           user={user}
+          profile={profile}
           workspace={null}
           onLogout={handleLogout}
           logoutLoading={logoutLoading}
@@ -474,6 +532,7 @@ export default function App() {
     <div className="app-wrapper">
       <Header
         user={user}
+        profile={profile}
         workspace={activeWorkspace}
         onLogout={handleLogout}
         logoutLoading={logoutLoading}
@@ -509,6 +568,31 @@ export default function App() {
       </footer>
 
       <div className="fab-group">
+        <button
+          id="btn-open-profile"
+          className="fab-profile"
+          onClick={() => setProfileOpen(true)}
+          aria-label="Buka profil"
+          title="Profil"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span className="fab-profile__label">Profil</span>
+        </button>
+
         <button
           id="btn-open-whatsapp"
           className="fab-wa"
@@ -612,6 +696,23 @@ export default function App() {
           <WhatsappSettingsPanel
             onClose={() => setWhatsappOpen(false)}
             workspaceId={activeWorkspace?.id}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {profileOpen ? (
+          <ProfilePanel
+            user={user}
+            activeWorkspace={activeWorkspace}
+            onClose={() => setProfileOpen(false)}
+            onProfileUpdated={(updatedProfile) => {
+              setProfile(updatedProfile);
+            }}
+            onWorkspaceUpdated={(updatedWorkspace) => {
+              setActiveWorkspace(updatedWorkspace);
+            }}
+            onLogout={handleLogout}
           />
         ) : null}
       </AnimatePresence>

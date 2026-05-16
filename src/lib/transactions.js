@@ -16,27 +16,50 @@ function applyWorkspaceFilter(query, workspaceId) {
   return query.eq('workspace_id', workspaceId);
 }
 
+export function normalizeCategory(cat) {
+  if (!cat) return 'lain_lain';
+  const lowerCat = cat.toLowerCase().trim();
+  if (lowerCat === 'makan & minum') return 'makan';
+  if (lowerCat === 'operasional') return 'kebutuhan_kos';
+  if (lowerCat === 'dan lain-lain' || lowerCat === 'lain-lain') return 'lain_lain';
+  return lowerCat;
+}
+
+export function formatCategoryDisplay(cat) {
+  if (!cat) return '';
+  return cat.replace(/_/g, ' ');
+}
+
 function mapExpenseRow(row) {
-  const finalCategory =
-    row.confirmed_category ||
-    row.predicted_category ||
-    'Belum diklasifikasi';
+  const rawCat = row.confirmed_category || row.predicted_category || row.category || 'lain_lain';
+  const normalizedCat = normalizeCategory(rawCat);
+
+  const predictedCategory = normalizeCategory(row.predicted_category || row.category || 'lain_lain');
+  const confirmedCategory = row.confirmed_category ? normalizeCategory(row.confirmed_category) : null;
 
   return {
     id: row.id,
+    workspace_id: row.workspace_id,
     subject: row.subject || '',
+    description: row.description || '',
+    displayTitle: row.subject || row.description || row.raw_text || 'Tanpa keterangan',
     amount: row.amount || 0,
-    raw_amount: row.raw_amount || '',
-    category: finalCategory,
-    final_category: finalCategory,
-    note: row.subject || '',
-    createdAt: row.created_at,
-    date: row.expense_date,
-
-    predicted_category: row.predicted_category,
+    rawAmount: row.raw_amount || '',
+    category: normalizedCat,
+    predictedCategory,
+    confirmedCategory,
+    isConfirmed: row.is_confirmed === true,
     confidence: row.confidence,
+    date: row.expense_date,
+    createdAt: row.created_at,
+    source: row.source,
+    rawText: row.raw_text,
+
+    // For compatibility with older components
+    predicted_category: predictedCategory,
+    confidence_percent: row.confidence,
     is_confident: row.is_confident,
-    confirmed_category: row.confirmed_category,
+    confirmed_category: confirmedCategory,
     is_confirmed: row.is_confirmed === true,
     model_version: row.model_version,
   };

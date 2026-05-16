@@ -25,9 +25,25 @@ export function normalizeCategory(cat) {
   return lowerCat;
 }
 
+const CATEGORY_DISPLAY_LABELS = {
+  makan: 'Makan',
+  jajan: 'Jajan',
+  kebutuhan_kos: 'Kebutuhan kos',
+  tagihan: 'Tagihan',
+  laundry: 'Laundry',
+  transportasi: 'Transportasi',
+  kesehatan: 'Kesehatan',
+  hiburan: 'Hiburan',
+  sosial: 'Sosial',
+  belanja_pribadi: 'Belanja pribadi',
+  edukasi: 'Edukasi',
+  lain_lain: 'Lain-lain',
+};
+
 export function formatCategoryDisplay(cat) {
   if (!cat) return '';
-  return cat.replace(/_/g, ' ');
+  const normalized = normalizeCategory(cat);
+  return CATEGORY_DISPLAY_LABELS[normalized] || cat.replace(/_/g, ' ');
 }
 
 function mapExpenseRow(row) {

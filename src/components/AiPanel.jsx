@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getAllExpenses } from '../lib/transactions.js';
 import { confirmTransactionCategory, VALID_CATEGORIES } from '../lib/aiFeedback.js';
-import { formatCategoryDisplay } from '../lib/transactions.js';
+import { formatCategoryDisplay, normalizeCategory } from '../lib/transactions.js';
 import { formatRupiah } from '../lib/formatters.js';
 
 /* ─── Toast ─── */
@@ -65,8 +65,85 @@ function AiSummary({ unconfirmed, confirmed, avgConfidence }) {
   );
 }
 
-/* ─── Confirmation Card ─── */
-function AiConfirmationCard({ tx, onConfirm, busy }) {
+/* ─── Correction Modal ─── */
+function CorrectionModal({ tx, onSave, onCancel, busy }) {
+  const [selected, setSelected] = useState(null);
+
+  return (
+    <motion.div
+      className="ai-correction-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onCancel}
+    >
+      <motion.div
+        className="ai-correction-modal"
+        initial={{ opacity: 0, scale: 0.92, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.92, y: 20 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="ai-correction-modal__header">
+          <span className="ai-correction-modal__icon" aria-hidden="true">✏️</span>
+          <div>
+            <p className="ai-correction-modal__title">Pilih kategori yang benar</p>
+            <p className="ai-correction-modal__subtitle">
+              {tx.displayTitle || '(tanpa nama)'} — {formatRupiah(tx.amount)}
+            </p>
+          </div>
+        </div>
+
+        <div className="ai-correction-modal__list">
+          {VALID_CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              className={`ai-correction-modal__item ${selected === cat ? 'ai-correction-modal__item--selected' : ''}`}
+              onClick={() => setSelected(cat)}
+              disabled={busy}
+            >
+              <span className="ai-correction-modal__item-dot" />
+              <span className="ai-correction-modal__item-label">
+                {formatCategoryDisplay(cat)}
+              </span>
+              {selected === cat && (
+                <span className="ai-correction-modal__item-check" aria-hidden="true">✓</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="ai-correction-modal__actions">
+          <button
+            className="ai-correction-modal__btn ai-correction-modal__btn--save"
+            disabled={!selected || busy}
+            onClick={() => selected && onSave(selected)}
+          >
+            {busy ? (
+              <>
+                <span className="spinner-ring spinner-ring--sm" />
+                Menyimpan…
+              </>
+            ) : (
+              'Simpan koreksi'
+            )}
+          </button>
+          <button
+            className="ai-correction-modal__btn ai-correction-modal__btn--cancel"
+            disabled={busy}
+            onClick={onCancel}
+          >
+            Batal
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ─── Unconfirmed Card ─── */
+function AiConfirmationCard({ tx, onConfirm, onCorrect, busy }) {
   const confidencePercent = tx.confidence != null ? (tx.confidence * 100).toFixed(1) : null;
   const hasPrediction = !!tx.predicted_category;
 
@@ -74,10 +151,14 @@ function AiConfirmationCard({ tx, onConfirm, busy }) {
   const displayDate = dateStr
     ? new Date(dateStr + 'T12:00:00').toLocaleDateString('id-ID', {
       day: 'numeric',
-      month: 'short',
+      month: 'long',
       year: 'numeric',
     })
     : '';
+
+  const resolvedCategory = normalizeCategory(
+    tx.confirmed_category || tx.predicted_category || tx.category || 'lain_lain'
+  );
 
   return (
     <motion.div
@@ -97,7 +178,7 @@ function AiConfirmationCard({ tx, onConfirm, busy }) {
           {hasPrediction ? (
             <>
               <span className="ai-card__pred-label">Prediksi AI:</span>
-              <span className="ai-card__pred-value" style={{ textTransform: 'capitalize' }}>
+              <span className="ai-card__pred-value">
                 {formatCategoryDisplay(tx.predicted_category)}
               </span>
             </>
@@ -109,9 +190,6 @@ function AiConfirmationCard({ tx, onConfirm, busy }) {
               Keyakinan: {confidencePercent}%
             </span>
           )}
-          <span className={`ai-card__status ${tx.is_confident ? 'ai-card__status--ok' : 'ai-card__status--warn'}`}>
-            {tx.is_confident ? '✓ Cukup yakin' : '⚑ Perlu ditilik'}
-          </span>
         </div>
       </div>
 
@@ -119,22 +197,69 @@ function AiConfirmationCard({ tx, onConfirm, busy }) {
         <button
           className="ai-cat-btn ai-cat-btn--confirm"
           disabled={!hasPrediction || busy}
-          onClick={() => hasPrediction && onConfirm(tx, tx.predicted_category)}
+          onClick={() => hasPrediction && onConfirm(tx, resolvedCategory)}
         >
           ✓ Benar
         </button>
-        {VALID_CATEGORIES.map((cat) => (
-          <button
-            key={cat}
-            className="ai-cat-btn"
-            style={{ textTransform: 'capitalize' }}
-            disabled={busy}
-            onClick={() => onConfirm(tx, cat)}
-          >
-            {formatCategoryDisplay(cat)}
-          </button>
-        ))}
+        <button
+          className="ai-cat-btn ai-cat-btn--correct"
+          disabled={busy}
+          onClick={() => onCorrect(tx)}
+        >
+          ✏️ Koreksi
+        </button>
       </div>
+    </motion.div>
+  );
+}
+
+/* ─── Confirmed Card ─── */
+function AiConfirmedCard({ tx, onReCorrect }) {
+  const dateStr = tx.expense_date || tx.date || '';
+  const displayDate = dateStr
+    ? new Date(dateStr + 'T12:00:00').toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
+    : '';
+
+  const finalCat = normalizeCategory(
+    tx.confirmed_category || tx.predicted_category || tx.category || 'lain_lain'
+  );
+
+  return (
+    <motion.div
+      className="ai-card ai-card--confirmed"
+      layout
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+    >
+      <div className="ai-card__header">
+        <div className="ai-card__info">
+          <p className="ai-card__subject">{tx.displayTitle || '(tanpa nama)'}</p>
+          <p className="ai-card__amount">{formatRupiah(tx.amount)}</p>
+          {displayDate && <p className="ai-card__date">{displayDate}</p>}
+        </div>
+        <div className="ai-card__prediction">
+          <span className="ai-card__pred-label">Kategori final:</span>
+          <span className="ai-card__pred-value">
+            {formatCategoryDisplay(finalCat)}
+          </span>
+          <span className="ai-card__status ai-card__status--ok">✓ Sudah dikonfirmasi</span>
+        </div>
+      </div>
+
+      {onReCorrect && (
+        <div className="ai-card__actions">
+          <button
+            className="ai-cat-btn ai-cat-btn--change"
+            onClick={() => onReCorrect(tx)}
+          >
+            Ubah
+          </button>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -145,6 +270,7 @@ export default function AiPanel({ onClose, onDataChanged, workspaceId }) {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [toast, setToast] = useState(null);
+  const [correctingTx, setCorrectingTx] = useState(null);
 
   const fetchData = useCallback(async () => {
     if (!workspaceId) {
@@ -175,7 +301,7 @@ export default function AiPanel({ onClose, onDataChanged, workspaceId }) {
   const confirmed = allTxs
     .filter((tx) => tx.is_confirmed)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .slice(0, 5);
+    .slice(0, 10);
 
   const withConf = allTxs.filter((tx) => tx.confidence != null);
   const avgConfidence =
@@ -183,6 +309,7 @@ export default function AiPanel({ onClose, onDataChanged, workspaceId }) {
       ? (withConf.reduce((sum, tx) => sum + tx.confidence, 0) / withConf.length) * 100
       : null;
 
+  /* ─── Confirm handler (Benar / Simpan koreksi) ─── */
   const handleConfirm = async (tx, category) => {
     setBusyId(tx.id);
 
@@ -205,6 +332,7 @@ export default function AiPanel({ onClose, onDataChanged, workspaceId }) {
         );
 
         setToast({ message: result.message, type: 'success' });
+        setCorrectingTx(null);
 
         if (onDataChanged) {
           onDataChanged();
@@ -219,6 +347,18 @@ export default function AiPanel({ onClose, onDataChanged, workspaceId }) {
       setToast({ message: 'Terjadi kesalahan sistem', type: 'error' });
     } finally {
       setBusyId(null);
+    }
+  };
+
+  /* ─── Open correction modal ─── */
+  const handleOpenCorrection = (tx) => {
+    setCorrectingTx(tx);
+  };
+
+  /* ─── Save correction from modal ─── */
+  const handleSaveCorrection = (category) => {
+    if (correctingTx) {
+      handleConfirm(correctingTx, category);
     }
   };
 
@@ -257,6 +397,7 @@ export default function AiPanel({ onClose, onDataChanged, workspaceId }) {
               avgConfidence={avgConfidence}
             />
 
+            {/* ── Belum Dikonfirmasi ── */}
             <div className="ai-section">
               <h3 className="ai-section__title">
                 ⏳ Belum Dikonfirmasi
@@ -270,6 +411,7 @@ export default function AiPanel({ onClose, onDataChanged, workspaceId }) {
                       key={tx.id}
                       tx={tx}
                       onConfirm={handleConfirm}
+                      onCorrect={handleOpenCorrection}
                       busy={busyId === tx.id}
                     />
                   ))}
@@ -282,9 +424,45 @@ export default function AiPanel({ onClose, onDataChanged, workspaceId }) {
                 )}
               </div>
             </div>
+
+            {/* ── Sudah Dikonfirmasi ── */}
+            {confirmed.length > 0 && (
+              <div className="ai-section">
+                <h3 className="ai-section__title">
+                  ✅ Sudah Dikonfirmasi
+                  <span className="ai-section__badge ai-section__badge--green">
+                    {allTxs.filter((tx) => tx.is_confirmed).length}
+                  </span>
+                </h3>
+
+                <div className="ai-card-list">
+                  <AnimatePresence mode="popLayout">
+                    {confirmed.map((tx) => (
+                      <AiConfirmedCard
+                        key={tx.id}
+                        tx={tx}
+                        onReCorrect={handleOpenCorrection}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* ── Correction Modal ── */}
+      <AnimatePresence>
+        {correctingTx && (
+          <CorrectionModal
+            tx={correctingTx}
+            onSave={handleSaveCorrection}
+            onCancel={() => setCorrectingTx(null)}
+            busy={busyId === correctingTx.id}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {toast && (

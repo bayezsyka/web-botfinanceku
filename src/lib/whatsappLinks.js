@@ -1,10 +1,19 @@
 import { supabase } from './supabase.js';
 
-/**
- * Mengambil semua tautan WhatsApp untuk workspace tertentu.
- * @param {string} workspaceId 
- * @returns {Promise<Array>}
- */
+function normalizeWhatsappLink(row) {
+  if (!row) return null;
+
+  const code = row.verification_code || row.code || '';
+  const prefix = row.role === 'sender' ? 'PENGIRIM' : 'LAPORAN';
+
+  return {
+    ...row,
+    code,
+    verification_code: code,
+    instruction: row.instruction || `${prefix} ${code}`,
+  };
+}
+
 export async function getWhatsappLinks(workspaceId) {
   if (!workspaceId) return [];
 
@@ -18,46 +27,41 @@ export async function getWhatsappLinks(workspaceId) {
     throw new Error(`Gagal mengambil data WhatsApp: ${error.message}`);
   }
 
-  return data || [];
+  return (data || []).map(normalizeWhatsappLink);
 }
 
-/**
- * Membuat kode tautan WhatsApp baru menggunakan RPC.
- * @param {Object} params
- * @param {string} params.workspaceId
- * @param {string} params.role - 'sender' | 'report_receiver'
- * @param {string} [params.displayName]
- * @returns {Promise<Object>}
- */
 export async function createWhatsappLinkCode({ workspaceId, role, displayName }) {
-  if (!workspaceId) throw new Error('Workspace ID diperlukan.');
+  if (!workspaceId) {
+    throw new Error('Workspace belum siap.');
+  }
 
   const { data, error } = await supabase.rpc('create_whatsapp_link_code', {
     p_workspace_id: workspaceId,
     p_role: role,
-    p_display_name: displayName || null
+    p_display_name: displayName || null,
   });
 
   if (error) {
     throw new Error(`Gagal membuat kode: ${error.message}`);
   }
 
-  return Array.isArray(data) ? data[0] : data;
+  const row = Array.isArray(data) ? data[0] : data;
+
+  return normalizeWhatsappLink(row);
 }
 
-/**
- * Mencabut tautan WhatsApp (menghapus atau me-revoke).
- * @param {string} linkId 
- * @returns {Promise<void>}
- */
 export async function revokeWhatsappLink(linkId) {
-  if (!linkId) throw new Error('Link ID diperlukan.');
+  if (!linkId) {
+    throw new Error('ID link tidak ditemukan.');
+  }
 
-  const { error } = await supabase.rpc('revoke_whatsapp_link', {
-    p_link_id: linkId
+  const { data, error } = await supabase.rpc('revoke_whatsapp_link', {
+    p_link_id: linkId,
   });
 
   if (error) {
     throw new Error(`Gagal memutus nomor: ${error.message}`);
   }
+
+  return Array.isArray(data) ? data[0] : data;
 }

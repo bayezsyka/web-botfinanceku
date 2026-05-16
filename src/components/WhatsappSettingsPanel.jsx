@@ -41,9 +41,11 @@ function LinkCard({ title, subtitle, role, link, onCreate, onRevoke, busy, busyR
   const isPending = link?.status === 'pending';
   const isVerified = link?.status === 'verified';
 
-  const instructionCode = role === 'sender' 
-    ? `PENGIRIM ${link?.link_code}` 
-    : `LAPORAN ${link?.link_code}`;
+  const instructionCode = link?.instruction || (
+    role === 'sender'
+      ? `PENGIRIM ${link?.verification_code || link?.code || ''}`
+      : `LAPORAN ${link?.verification_code || link?.code || ''}`
+  );
 
   const handleCopy = () => {
     navigator.clipboard.writeText(instructionCode);
@@ -130,7 +132,7 @@ function LinkCard({ title, subtitle, role, link, onCreate, onRevoke, busy, busyR
             <div className="wa-verified-info">
               <div className="wa-phone-row">
                 <Smartphone size={16} color="var(--clr-text-muted)" />
-                <span className="wa-phone-number">+{link.whatsapp_number}</span>
+                <span className="wa-phone-number">+{link.phone_number || link.whatsapp_number}</span>
               </div>
               {link.display_name && (
                 <p className="wa-display-name">{link.display_name}</p>
@@ -211,8 +213,17 @@ export default function WhatsappSettingsPanel({ onClose, workspaceId }) {
     }
   };
 
-  const senderLink = links.find(l => l.role === 'sender');
-  const receiverLink = links.find(l => l.role === 'report_receiver');
+  const activeLinks = links.filter(
+    (link) => link.status === 'pending' || link.status === 'verified'
+  );
+
+  const senderLink =
+    activeLinks.find((link) => link.role === 'sender' && link.status === 'verified') ||
+    activeLinks.find((link) => link.role === 'sender' && link.status === 'pending');
+
+  const receiverLink =
+    activeLinks.find((link) => link.role === 'report_receiver' && link.status === 'verified') ||
+    activeLinks.find((link) => link.role === 'report_receiver' && link.status === 'pending');
 
   return (
     <motion.div
